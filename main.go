@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zikes/chrisify/facefinder"
-
 	"github.com/disintegration/imaging"
+	"github.com/harrydb/go/img/grayscale"
+	"github.com/paulvasilenko/chrisify/facefinder"
 )
 
 var haarCascade = flag.String("haar", "haarcascade_frontalface_alt.xml", "The location of the Haar Cascade XML configuration to be provided to OpenCV.")
@@ -46,24 +46,43 @@ func main() {
 
 	baseImage := loadImage(file)
 
-	faces := finder.Detect(baseImage)
+	imageToDetect := imaging.Resize(
+		baseImage,
+		640,
+		0,
+		imaging.Lanczos)
 
-	bounds := baseImage.Bounds()
+	blurred := imaging.Resize(
+		imageToDetect,
+		640,
+		0,
+		imaging.Gaussian)
 
-	canvas := canvasFromImage(baseImage)
+	grayImg := grayscale.Convert(blurred, grayscale.ToGrayLuminance)
+
+	faces := finder.Detect(grayImg)
+
+	bounds := imageToDetect.Bounds()
+
+	canvas := canvasFromImage(imageToDetect)
 
 	for _, face := range faces {
-		rect := rectMargin(30.0, face)
+		rect := rectMargin(5.0, face)
+		newRect := image.Rect(
+			rect.Min.X,
+			rect.Min.Y,
+			rect.Max.X+rect.Min.X/6,
+			rect.Max.Y+rect.Min.X/6)
 
 		newFace := chrisFaces.Random()
 		if newFace == nil {
 			panic("nil face")
 		}
-		chrisFace := imaging.Fit(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
+		chrisFace := imaging.Fit(newFace, newRect.Dx(), newRect.Dy(), imaging.Lanczos)
 
 		draw.Draw(
 			canvas,
-			rect,
+			newRect,
 			chrisFace,
 			bounds.Min,
 			draw.Over,
