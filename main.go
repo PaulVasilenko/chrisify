@@ -1,29 +1,36 @@
 package main
 
 import (
+	"cloud.google.com/go/vision"
 	"flag"
+	"github.com/disintegration/imaging"
+	"golang.org/x/net/context"
 	"image"
 	"image/draw"
 	"image/jpeg"
 	_ "image/png"
+	"log"
+	"log/syslog"
 	"os"
 	"path/filepath"
-
-	"github.com/disintegration/imaging"
-	"github.com/harrydb/go/img/grayscale"
-	"github.com/paulvasilenko/chrisify/facefinder"
 )
 
 var haarCascade = flag.String("haar", "haarcascade_frontalface_alt.xml", "The location of the Haar Cascade XML configuration to be provided to OpenCV.")
 var facesDir = flag.String("faces", "faces", "The directory to search for faces.")
 
 func main() {
+	log.SetFlags(0)
+
+	syslogWriter, err := syslog.New(syslog.LOG_INFO, "chrisify")
+
+	if err == nil {
+		log.SetOutput(syslogWriter)
+	}
+
 	flag.Parse()
 
 	var chrisFaces FaceList
-
 	var facesPath string
-	var err error
 
 	if *facesDir != "" {
 		facesPath, err = filepath.Abs(*facesDir)
@@ -39,50 +46,53 @@ func main() {
 	if len(chrisFaces) == 0 {
 		panic("no faces found")
 	}
-
 	file := flag.Arg(0)
-
-	finder := facefinder.NewFinder(*haarCascade)
-
+	log.Println("Processing file: ", file)
 	baseImage := loadImage(file)
 
-	imageToDetect := imaging.Resize(
-		baseImage,
-		640,
-		0,
-		imaging.Lanczos)
+	ctx := context.Background()
 
-	blurred := imaging.Resize(
-		imageToDetect,
-		640,
-		0,
-		imaging.Gaussian)
+	client, err := vision.NewClient(ctx)
+	if err != nil {
+		panic(err)
+	}
 
-	grayImg := grayscale.Convert(blurred, grayscale.ToGrayLuminance)
+	f, err := os.Open(file)
 
-	faces := finder.Detect(grayImg)
+	if err != nil {
+		panic(err)
+	}
 
-	bounds := imageToDetect.Bounds()
+	defer f.Close()
 
-	canvas := canvasFromImage(imageToDetect)
+	imageToDetect, err := vision.NewImageFromReader(f)
+
+	faces, err := client.DetectFaces(ctx, imageToDetect, 10)
+
+	if err != nil {
+		panic(err)
+	}
+
+	bounds := baseImage.Bounds()
+
+	canvas := canvasFromImage(baseImage)
 
 	for _, face := range faces {
-		rect := rectMargin(5.0, face)
-		newRect := image.Rect(
-			rect.Min.X,
-			rect.Min.Y,
-			rect.Max.X+rect.Min.X/6,
-			rect.Max.Y+rect.Min.X/6)
+		rect := image.Rect(
+			face.BoundingPoly[0].X,
+			face.BoundingPoly[0].Y,
+			face.BoundingPoly[2].X,
+			face.BoundingPoly[2].Y)
 
 		newFace := chrisFaces.Random()
 		if newFace == nil {
 			panic("nil face")
 		}
-		chrisFace := imaging.Fit(newFace, newRect.Dx(), newRect.Dy(), imaging.Lanczos)
+		chrisFace := imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
 
 		draw.Draw(
 			canvas,
-			newRect,
+			rect,
 			chrisFace,
 			bounds.Min,
 			draw.Over,
