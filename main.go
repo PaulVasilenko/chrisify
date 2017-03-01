@@ -11,6 +11,7 @@ import (
 	_ "image/png"
 	"log"
 	"log/syslog"
+	"math/rand"
 	"os"
 	"path/filepath"
 )
@@ -77,14 +78,15 @@ func main() {
 
 	canvas := canvasFromImage(baseImage)
 
-	for _, face := range faces {
+	numberList := rand.Perm(len(faces))
+
+	for i, face := range faces {
 		rect := image.Rect(
 			face.BoundingPoly[0].X,
 			face.BoundingPoly[0].Y,
 			face.BoundingPoly[2].X,
 			face.BoundingPoly[2].Y)
-
-		newFace := chrisFaces.Random()
+		newFace := chrisFaces[numberList[i]%len(chrisFaces)]
 		if newFace == nil {
 			panic("nil face")
 		}
