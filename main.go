@@ -77,7 +77,7 @@ func main() {
 
 	canvas := canvasFromImage(baseImage)
 
-	numberList := rand.Perm(len(faces))
+	numberList := rand.Perm(100)
 
 	for i, face := range faces {
 		rect := image.Rect(
