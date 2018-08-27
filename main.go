@@ -1,7 +1,7 @@
 package main
 
 import (
-	"cloud.google.com/go/vision"
+	"cloud.google.com/go/vision/apiv1"
 	"flag"
 	"github.com/disintegration/imaging"
 	"golang.org/x/net/context"
@@ -52,7 +52,7 @@ func main() {
 
 	ctx := context.Background()
 
-	client, err := vision.NewClient(ctx)
+	client, err := vision.NewImageAnnotatorClient(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +67,7 @@ func main() {
 
 	imageToDetect, err := vision.NewImageFromReader(f)
 
-	faces, err := client.DetectFaces(ctx, imageToDetect, 10)
+	faces, err := client.DetectFaces(ctx, imageToDetect, nil, 10)
 
 	if err != nil {
 		panic(err)
@@ -81,10 +81,10 @@ func main() {
 
 	for i, face := range faces {
 		rect := image.Rect(
-			face.BoundingPoly[0].X,
-			face.BoundingPoly[0].Y,
-			face.BoundingPoly[2].X,
-			face.BoundingPoly[2].Y)
+			int(face.BoundingPoly.Vertices[0].X),
+			int(face.BoundingPoly.Vertices[0].Y),
+			int(face.BoundingPoly.Vertices[2].X),
+			int(face.BoundingPoly.Vertices[2].Y))
 		newFace := chrisFaces[numberList[i]%len(chrisFaces)]
 		if newFace == nil {
 			panic("nil face")
