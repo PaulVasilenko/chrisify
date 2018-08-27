@@ -29,7 +29,6 @@ func main() {
 
 	flag.Parse()
 
-	var chrisFaces FaceList
 	var facesPath string
 
 	if *facesDir != "" {
@@ -39,6 +38,7 @@ func main() {
 		}
 	}
 
+	chrisFaces := FaceList{}
 	err = chrisFaces.Load(facesPath)
 	if err != nil {
 		panic(err)
