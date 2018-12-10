@@ -14,11 +14,13 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 var facesDir = flag.String("faces", "faces", "The directory to search for faces.")
 
 func main() {
+	rand.Seed(time.Now().UTC().UnixNano())
 	log.SetFlags(0)
 
 	syslogWriter, err := syslog.New(syslog.LOG_INFO, "chrisify")
@@ -67,7 +69,7 @@ func main() {
 
 	imageToDetect, err := vision.NewImageFromReader(f)
 
-	faces, err := client.DetectFaces(ctx, imageToDetect, nil, 10)
+	faces, err := client.DetectFaces(ctx, imageToDetect, nil, 100)
 
 	if err != nil {
 		panic(err)
