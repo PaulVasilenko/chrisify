@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/vision/apiv1"
 	"flag"
 	"github.com/disintegration/imaging"
+	"github.com/paulvasilenko/chrisify/colorify"
 	"golang.org/x/net/context"
 	"image"
 	"image/draw"
@@ -18,6 +19,7 @@ import (
 )
 
 var facesDir = flag.String("faces", "faces", "The directory to search for faces.")
+var colorCorrection = flag.Bool("color-correction", false, "Whether to correct face color to image color or not")
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -92,7 +94,9 @@ func main() {
 			panic("nil face")
 		}
 		chrisFace := imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
-
+		if *colorCorrection {
+			chrisFace = colorify.Transfer(canvas, chrisFace)
+		}
 		draw.Draw(
 			canvas,
 			rect,
