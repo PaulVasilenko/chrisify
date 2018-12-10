@@ -81,6 +81,12 @@
 			"revisionTime": "2018-03-29T00:05:37Z"
 		},
 		{
+			"checksumSHA1": "COd+6lqzgbdwr5Y2hs5dgwSlaf0=",
+			"path": "github.com/lucasb-eyer/go-colorful",
+			"revision": "12d3b2882a08d1abc9488e34f3e1ae35165f2d07",
+			"revisionTime": "2018-10-28T22:34:41Z"
+		},
+		{
 			"checksumSHA1": "iASBoEMOkTso9Gu2cDR6AdZfhHE=",
 			"path": "go.opencensus.io/exporter/stackdriver/propagation",
 			"revision": "7838e5670888b348b2caf302c8cd862ad0e903f8",
