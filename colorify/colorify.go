@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"log"
 )
 
 type Lab struct {
@@ -23,40 +24,35 @@ type Stat struct {
 }
 
 func Transfer(src *image.RGBA, target *image.NRGBA) *image.NRGBA {
+	log.Println("start color transfer")
 	srcLab := RGBAToLab(src)
 	targetLab := NRGBAToLab(target)
-
 	srcLabStat := srcLab.Stat()
 	targetLabStat := targetLab.Stat()
-
 	forEachLABCounter(targetLab, func(l, a, b float64, counter int) {
 		targetLab.Pix[counter]   = (l-targetLabStat.LStat.Mean) * (srcLabStat.LStat.StdDev / targetLabStat.LStat.StdDev) + srcLabStat.LStat.Mean
 		targetLab.Pix[counter+1] = (a-targetLabStat.AStat.Mean) * (srcLabStat.AStat.StdDev / targetLabStat.AStat.StdDev) + srcLabStat.AStat.Mean
 		targetLab.Pix[counter+2] = (b-targetLabStat.BStat.Mean) * (srcLabStat.BStat.StdDev / targetLabStat.BStat.StdDev) + srcLabStat.BStat.Mean
 	})
-
-	scaleLab(targetLab)
-
-	w := target.Rect.Dx()
+//	scaleLab(targetLab)
 
 	newTargetRGBA := image.NewNRGBA(target.Rect)
+	ind := 0
 	for x := target.Bounds().Min.X; x < target.Bounds().Max.X; x++ {
 		for y := target.Bounds().Min.Y; y < target.Bounds().Max.Y; y++ {
-			point := src.RGBAAt(x, y)
-
-			ind := (w * x + y) * 3
-
+			point := target.NRGBAAt(x, y)
 			c := colorful.Lab(targetLab.Pix[ind], targetLab.Pix[ind+1], targetLab.Pix[ind+2])
-			R, G, B, _ := c.RGBA()
-
-			point.R = uint8(R)
-			point.B = uint8(B)
-			point.G = uint8(G)
+			R, G, B := c.RGB255()
+			point.R = R
+			point.B = B
+			point.G = G
 
 			newTargetRGBA.SetNRGBA(x, y, color.NRGBA(point))
+			ind += 3
 		}
 	}
 
+	log.Println("finish color transfer")
 	return newTargetRGBA
 }
 
@@ -71,19 +67,11 @@ func forEachNRGBA(src *image.NRGBA, f func(r, g, b uint32)) {
 }
 
 func forEachRGBA(src *image.RGBA, f func(r, g, b uint32)) {
-	var r, g, b uint32
-
-	for i, pix := range src.Pix {
-		switch i % 4 {
-		case 0:
-			r = uint32(pix)
-		case 1:
-			g = uint32(pix)
-		case 2:
-			b = uint32(pix)
+	for x := src.Bounds().Min.X; x < src.Bounds().Max.X; x++ {
+		for y := src.Bounds().Min.Y; y < src.Bounds().Max.Y; y++ {
+			point := src.At(x, y)
+			r, g, b, _ := point.RGBA()
 			f(r, g, b)
-		case 3:
-			continue
 		}
 	}
 }
@@ -115,23 +103,8 @@ func NRGBAToLab(src *image.NRGBA) *Lab {
 }
 
 func rgbToLab(R, G, B uint32) (l, a, b float64) {
-	c := colorful.LinearRgb(float64(R), float64(G), float64(B))
+	c := colorful.Color{float64(R) / 65535.0, float64(G) / 65535.0, float64(B) / 65535.0}
 	l, a, b = c.Lab()
-	//fR := math.Max(1.0/255.0, float64(R) / 255.0)
-	//fG := math.Max(1.0/255.0, float64(G) / 255.0)
-	//fB := math.Max(1.0/255.0, float64(B) / 255.0)
-	//
-	//L := 0.3811*float64(fR) + 0.5783*float64(fG) + 0.0402*float64(fB)
-	//M := 0.1967*float64(fR) + 0.7244*float64(fG) + 0.0782*float64(fB)
-	//S := 0.0241*float64(fR) + 0.1288*float64(fG) + 0.8444*float64(fB)
-	//
-	//L = math.Log(L)
-	//M = math.Log(M)
-	//S = math.Log(S)
-	//
-	//l = 1.0 / math.Sqrt(3) * L + 1.0 / math.Sqrt(3) * M + 1.0 / math.Sqrt(3) * S
-	//a = 1.0 / math.Sqrt(6) * L + 1.0 / math.Sqrt(6) * M - 2.0 / math.Sqrt(6) * S
-	//b = 1.0 / math.Sqrt(2) * L - 1.0 / math.Sqrt(2) * M + 0 * S
 	return
 }
 
@@ -146,36 +119,6 @@ func RGBAToLab(src *image.RGBA) *Lab {
 }
 
 func scaleLab(src *Lab) {
-	var minL, maxL, minA, maxA, minB, maxB float64
-	forEachLAB(src, func(l, a, b float64) {
-		if l < minL {
-			minL = l
-		}
-		if a < minA {
-			minL = a
-		}
-		if b < minB {
-			minB = b
-		}
-
-		if l > maxA {
-			maxL = l
-		}
-		if a > maxA {
-			maxA = a
-		}
-		if b > maxA {
-			maxB = b
-		}
-	})
-
-	if minL < 0 || maxL > 255 || minA < 0 || maxA > 255 || minB < 0 || maxB > 255 {
-		forEachLABCounter(src, func(l, a, b float64, counter int) {
-			src.Pix[counter] = 255 * (l - minL) / (maxL - minL)
-			src.Pix[counter+1] = 255 * (a - minA) / (maxA - minA)
-			src.Pix[counter+2] = 255 * (b - minB) / (maxB - minB)
-		})
-	}
 }
 
 func (src *Lab) Stat() *LabStat {
@@ -199,9 +142,9 @@ func (src *Lab) Stat() *LabStat {
 		bStd += math.Pow(b - bMean, 2)
 	})
 
-	lStd = math.Sqrt(lStd/amount-1)
-	aStd = math.Sqrt(aStd/amount-1)
-	bStd = math.Sqrt(bStd/amount-1)
+	lStd = math.Sqrt(lStd/(amount-1))
+	aStd = math.Sqrt(aStd/(amount-1))
+	bStd = math.Sqrt(bStd/(amount-1))
 
 	return &LabStat{
 		LStat: Stat{
