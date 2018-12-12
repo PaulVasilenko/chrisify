@@ -80,6 +80,7 @@ func main() {
 	bounds := baseImage.Bounds()
 
 	canvas := canvasFromImage(baseImage)
+	sourceCanvas := canvasFromImage(baseImage)
 
 	numberList := rand.Perm(100)
 
@@ -95,7 +96,7 @@ func main() {
 		}
 		chrisFace := imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
 		if *colorCorrection {
-			chrisFace = colorify.Transfer(canvas, chrisFace)
+			chrisFace = colorify.Transfer(sourceCanvas, chrisFace)
 		}
 		draw.Draw(
 			canvas,

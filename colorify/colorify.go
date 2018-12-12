@@ -4,8 +4,8 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 	"image"
 	"image/color"
-	"math"
 	"log"
+	"math"
 )
 
 type Lab struct {
@@ -29,12 +29,13 @@ func Transfer(src *image.RGBA, target *image.NRGBA) *image.NRGBA {
 	targetLab := NRGBAToLab(target)
 	srcLabStat := srcLab.Stat()
 	targetLabStat := targetLab.Stat()
+	log.Println(srcLabStat)
+	log.Println(targetLabStat)
 	forEachLABCounter(targetLab, func(l, a, b float64, counter int) {
-		targetLab.Pix[counter]   = (l-targetLabStat.LStat.Mean) * (srcLabStat.LStat.StdDev / targetLabStat.LStat.StdDev) + srcLabStat.LStat.Mean
-		targetLab.Pix[counter+1] = (a-targetLabStat.AStat.Mean) * (srcLabStat.AStat.StdDev / targetLabStat.AStat.StdDev) + srcLabStat.AStat.Mean
-		targetLab.Pix[counter+2] = (b-targetLabStat.BStat.Mean) * (srcLabStat.BStat.StdDev / targetLabStat.BStat.StdDev) + srcLabStat.BStat.Mean
+		targetLab.Pix[counter] = calculateNewPix(l, targetLabStat.LStat, srcLabStat.LStat)
+		targetLab.Pix[counter+1] = calculateNewPix(a, targetLabStat.AStat, srcLabStat.AStat)
+		targetLab.Pix[counter+2] = calculateNewPix(b, targetLabStat.BStat, srcLabStat.BStat)
 	})
-//	scaleLab(targetLab)
 
 	newTargetRGBA := image.NewNRGBA(target.Rect)
 	ind := 0
@@ -42,7 +43,7 @@ func Transfer(src *image.RGBA, target *image.NRGBA) *image.NRGBA {
 		for y := target.Bounds().Min.Y; y < target.Bounds().Max.Y; y++ {
 			point := target.NRGBAAt(x, y)
 			c := colorful.Lab(targetLab.Pix[ind], targetLab.Pix[ind+1], targetLab.Pix[ind+2])
-			R, G, B := c.RGB255()
+			R, G, B := c.Clamped().RGB255()
 			point.R = R
 			point.B = B
 			point.G = G
@@ -94,7 +95,7 @@ func forEachLAB(src *Lab, f func(l, a, b float64)) {
 
 func NRGBAToLab(src *image.NRGBA) *Lab {
 	lab := &Lab{}
-	forEachNRGBA(src, func(R, G, B uint32){
+	forEachNRGBA(src, func(R, G, B uint32) {
 		l, a, b := rgbToLab(R, G, B)
 		lab.Pix = append(lab.Pix, l, a, b)
 	})
@@ -110,15 +111,12 @@ func rgbToLab(R, G, B uint32) (l, a, b float64) {
 
 func RGBAToLab(src *image.RGBA) *Lab {
 	lab := &Lab{}
-	forEachRGBA(src, func(R, G, B uint32){
+	forEachRGBA(src, func(R, G, B uint32) {
 		l, a, b := rgbToLab(R, G, B)
 		lab.Pix = append(lab.Pix, l, a, b)
 	})
 
 	return lab
-}
-
-func scaleLab(src *Lab) {
 }
 
 func (src *Lab) Stat() *LabStat {
@@ -137,14 +135,14 @@ func (src *Lab) Stat() *LabStat {
 
 	var lStd, aStd, bStd float64
 	forEachLAB(src, func(l, a, b float64) {
-		lStd += math.Pow(l - lMean, 2)
-		aStd += math.Pow(a - aMean, 2)
-		bStd += math.Pow(b - bMean, 2)
+		lStd += math.Pow(l-lMean, 2)
+		aStd += math.Pow(a-aMean, 2)
+		bStd += math.Pow(b-bMean, 2)
 	})
 
-	lStd = math.Sqrt(lStd/(amount-1))
-	aStd = math.Sqrt(aStd/(amount-1))
-	bStd = math.Sqrt(bStd/(amount-1))
+	lStd = math.Sqrt(lStd / (amount))
+	aStd = math.Sqrt(aStd / (amount))
+	bStd = math.Sqrt(bStd / (amount))
 
 	return &LabStat{
 		LStat: Stat{
@@ -168,4 +166,8 @@ func forEachLABCounter(src *Lab, f func(l, a, b float64, counter int)) {
 		f(l, a, b, counter)
 		counter += 3
 	})
+}
+
+func calculateNewPix(src float64, targetStat, srcStat Stat) float64 {
+	return (src-targetStat.Mean)*(targetStat.StdDev/srcStat.StdDev) + srcStat.Mean
 }
