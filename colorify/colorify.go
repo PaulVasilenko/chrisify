@@ -150,8 +150,8 @@ func (src *Lab) Stat() *LabStat {
 			StdDev: lStd,
 		},
 		AStat: Stat{
-			Mean:   lMean,
-			StdDev: lStd,
+			Mean:   aMean,
+			StdDev: aStd,
 		},
 		BStat: Stat{
 			Mean:   bMean,
