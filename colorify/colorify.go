@@ -169,5 +169,5 @@ func forEachLABCounter(src *Lab, f func(l, a, b float64, counter int)) {
 }
 
 func calculateNewPix(src float64, targetStat, srcStat Stat) float64 {
-	return (src-targetStat.Mean)*(targetStat.StdDev/srcStat.StdDev) + srcStat.Mean
+	return (src-targetStat.Mean)*(srcStat.StdDev/targetStat.StdDev) + srcStat.Mean
 }

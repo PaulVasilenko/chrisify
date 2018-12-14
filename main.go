@@ -96,7 +96,7 @@ func main() {
 		}
 		chrisFace := imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
 		if *colorCorrection {
-			chrisFace = colorify.Transfer(sourceCanvas, chrisFace)
+			chrisFace = colorify.Transfer(sourceCanvas.SubImage(rect).(*image.RGBA), chrisFace)
 		}
 		draw.Draw(
 			canvas,
