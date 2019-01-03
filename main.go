@@ -1,11 +1,7 @@
 package main
 
 import (
-	"cloud.google.com/go/vision/apiv1"
 	"flag"
-	"github.com/disintegration/imaging"
-	"github.com/paulvasilenko/chrisify/colorify"
-	"golang.org/x/net/context"
 	"image"
 	"image/draw"
 	"image/jpeg"
@@ -16,6 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"cloud.google.com/go/vision/apiv1"
+	"github.com/disintegration/imaging"
+	"github.com/paulvasilenko/go-transcolor"
+	"golang.org/x/net/context"
 )
 
 var facesDir = flag.String("faces", "faces", "The directory to search for faces.")
@@ -94,9 +95,10 @@ func main() {
 		if newFace == nil {
 			panic("nil face")
 		}
-		chrisFace := imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
+		var chrisFace image.Image
+		chrisFace = imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
 		if *colorCorrection {
-			chrisFace = colorify.Transfer(sourceCanvas.SubImage(rect).(*image.RGBA), chrisFace)
+			chrisFace = transcolor.Transfer(sourceCanvas.SubImage(rect), chrisFace)
 		}
 		draw.Draw(
 			canvas,

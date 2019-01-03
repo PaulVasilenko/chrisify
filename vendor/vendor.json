@@ -87,6 +87,12 @@
 			"revisionTime": "2018-10-28T22:34:41Z"
 		},
 		{
+			"checksumSHA1": "XNTThyDWhVQE0erVAii1ASinyyY=",
+			"path": "github.com/paulvasilenko/go-transcolor",
+			"revision": "0c09eb1faf6da052557e679a5550b1085a0082cf",
+			"revisionTime": "2019-01-03T11:48:48Z"
+		},
+		{
 			"checksumSHA1": "iASBoEMOkTso9Gu2cDR6AdZfhHE=",
 			"path": "go.opencensus.io/exporter/stackdriver/propagation",
 			"revision": "7838e5670888b348b2caf302c8cd862ad0e903f8",
