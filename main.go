@@ -4,10 +4,7 @@ import (
 	"flag"
 	"image"
 	"image/draw"
-	"image/jpeg"
-	_ "image/png"
-	"log"
-	"log/syslog"
+	"image/png"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -20,20 +17,12 @@ import (
 )
 
 var facesDir = flag.String("faces", "faces", "The directory to search for faces.")
-var colorCorrection = flag.Bool("color-correction", false, "Whether to correct face color to image color or not")
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
-	log.SetFlags(0)
-
-	syslogWriter, err := syslog.New(syslog.LOG_INFO, "chrisify")
-
-	if err == nil {
-		log.SetOutput(syslogWriter)
-	}
-
 	flag.Parse()
 
+	var err error
 	var facesPath string
 
 	if *facesDir != "" {
@@ -52,7 +41,6 @@ func main() {
 		panic("no faces found")
 	}
 	file := flag.Arg(0)
-	log.Println("Processing file: ", file)
 	baseImage := loadImage(file)
 
 	ctx := context.Background()
@@ -83,7 +71,7 @@ func main() {
 	canvas := canvasFromImage(baseImage)
 	sourceCanvas := canvasFromImage(baseImage)
 
-	numberList := rand.Perm(100)
+	numberList := rand.Perm(len(faces))
 
 	for i, face := range faces {
 		rect := image.Rect(
@@ -95,15 +83,15 @@ func main() {
 		if newFace == nil {
 			panic("nil face")
 		}
-		var chrisFace image.Image
-		chrisFace = imaging.Resize(newFace, rect.Dx(), rect.Dy(), imaging.Lanczos)
-		if *colorCorrection {
-			chrisFace = transcolor.Transfer(sourceCanvas.SubImage(rect), chrisFace)
-		}
 		draw.Draw(
 			canvas,
 			rect,
-			chrisFace,
+			transcolor.Transfer(
+				sourceCanvas.SubImage(rect),
+				imaging.Resize(
+					newFace, rect.Dx(), rect.Dy(), imaging.Lanczos,
+				),
+			),
 			bounds.Min,
 			draw.Over,
 		)
@@ -116,15 +104,15 @@ func main() {
 			0,
 			imaging.Lanczos,
 		)
-		face_bounds := face.Bounds()
+		faceBounds := face.Bounds()
 		draw.Draw(
 			canvas,
 			bounds,
 			face,
-			bounds.Min.Add(image.Pt(-bounds.Max.X/2+face_bounds.Max.X/2, -bounds.Max.Y+int(float64(face_bounds.Max.Y)/1.9))),
+			bounds.Min.Add(image.Pt(-bounds.Max.X/2+faceBounds.Max.X/2, -bounds.Max.Y+int(float64(faceBounds.Max.Y)/1.9))),
 			draw.Over,
 		)
 	}
 
-	jpeg.Encode(os.Stdout, canvas, &jpeg.Options{jpeg.DefaultQuality})
+	png.Encode(os.Stdout, canvas)
 }

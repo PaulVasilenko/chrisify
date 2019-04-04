@@ -17,6 +17,7 @@ package view
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -24,12 +25,11 @@ import (
 	"time"
 
 	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/internal"
 	"go.opencensus.io/tag"
 )
 
 // View allows users to aggregate the recorded stats.Measurements.
-// Views need to be passed to the Subscribe function to be before data will be
+// Views need to be passed to the Register function to be before data will be
 // collected and sent to Exporters.
 type View struct {
 	Name        string // Name of View. Must be unique. If unset, will default to the name of the Measure.
@@ -67,14 +67,19 @@ func (v *View) same(other *View) bool {
 		v.Measure.Name() == other.Measure.Name()
 }
 
-// canonicalized returns a validated View canonicalized by setting explicit
+// ErrNegativeBucketBounds error returned if histogram contains negative bounds.
+//
+// Deprecated: this should not be public.
+var ErrNegativeBucketBounds = errors.New("negative bucket bounds not supported")
+
+// canonicalize canonicalizes v by setting explicit
 // defaults for Name and Description and sorting the TagKeys
 func (v *View) canonicalize() error {
 	if v.Measure == nil {
-		return fmt.Errorf("cannot subscribe view %q: measure not set", v.Name)
+		return fmt.Errorf("cannot register view %q: measure not set", v.Name)
 	}
 	if v.Aggregation == nil {
-		return fmt.Errorf("cannot subscribe view %q: aggregation not set", v.Name)
+		return fmt.Errorf("cannot register view %q: aggregation not set", v.Name)
 	}
 	if v.Name == "" {
 		v.Name = v.Measure.Name()
@@ -88,7 +93,25 @@ func (v *View) canonicalize() error {
 	sort.Slice(v.TagKeys, func(i, j int) bool {
 		return v.TagKeys[i].Name() < v.TagKeys[j].Name()
 	})
+	sort.Float64s(v.Aggregation.Buckets)
+	for _, b := range v.Aggregation.Buckets {
+		if b < 0 {
+			return ErrNegativeBucketBounds
+		}
+	}
+	// drop 0 bucket silently.
+	v.Aggregation.Buckets = dropZeroBounds(v.Aggregation.Buckets...)
+
 	return nil
+}
+
+func dropZeroBounds(bounds ...float64) []float64 {
+	for i, bound := range bounds {
+		if bound > 0 {
+			return bounds[i:]
+		}
+	}
+	return []float64{}
 }
 
 // viewInternal is the internal representation of a View.
@@ -127,12 +150,12 @@ func (v *viewInternal) collectedRows() []*Row {
 	return v.collector.collectedRows(v.view.TagKeys)
 }
 
-func (v *viewInternal) addSample(m *tag.Map, val float64) {
+func (v *viewInternal) addSample(m *tag.Map, val float64, attachments map[string]interface{}, t time.Time) {
 	if !v.isSubscribed() {
 		return
 	}
 	sig := string(encodeWithKeys(m, v.view.TagKeys))
-	v.collector.addSample(sig, val)
+	v.collector.addSample(sig, val, attachments, t)
 }
 
 // A Data is a set of rows about usage of the single measure associated
@@ -172,11 +195,23 @@ func (r *Row) Equal(other *Row) bool {
 	return reflect.DeepEqual(r.Tags, other.Tags) && r.Data.equal(other.Data)
 }
 
-func checkViewName(name string) error {
-	if len(name) > internal.MaxNameLength {
-		return fmt.Errorf("view name cannot be larger than %v", internal.MaxNameLength)
+const maxNameLength = 255
+
+// Returns true if the given string contains only printable characters.
+func isPrintable(str string) bool {
+	for _, r := range str {
+		if !(r >= ' ' && r <= '~') {
+			return false
+		}
 	}
-	if !internal.IsPrintable(name) {
+	return true
+}
+
+func checkViewName(name string) error {
+	if len(name) > maxNameLength {
+		return fmt.Errorf("view name cannot be larger than %v", maxNameLength)
+	}
+	if !isPrintable(name) {
 		return fmt.Errorf("view name needs to be an ASCII string")
 	}
 	return nil

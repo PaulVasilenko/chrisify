@@ -41,14 +41,6 @@ func NewFace(file string) (*Face, error) {
 	return face, nil
 }
 
-func NewMustFace(file string) *Face {
-	face, err := NewFace(file)
-	if err != nil {
-		panic(err)
-	}
-	return face
-}
-
 type FaceList []*Face
 
 func (fl FaceList) Random() image.Image {

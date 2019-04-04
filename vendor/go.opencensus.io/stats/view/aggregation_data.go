@@ -17,6 +17,9 @@ package view
 
 import (
 	"math"
+	"time"
+
+	"go.opencensus.io/metric/metricdata"
 )
 
 // AggregationData represents an aggregated value from a collection.
@@ -24,7 +27,7 @@ import (
 // Mosts users won't directly access aggregration data.
 type AggregationData interface {
 	isAggregationData() bool
-	addSample(v float64)
+	addSample(v float64, attachments map[string]interface{}, t time.Time)
 	clone() AggregationData
 	equal(other AggregationData) bool
 }
@@ -41,7 +44,7 @@ type CountData struct {
 
 func (a *CountData) isAggregationData() bool { return true }
 
-func (a *CountData) addSample(v float64) {
+func (a *CountData) addSample(_ float64, _ map[string]interface{}, _ time.Time) {
 	a.Value = a.Value + 1
 }
 
@@ -68,8 +71,8 @@ type SumData struct {
 
 func (a *SumData) isAggregationData() bool { return true }
 
-func (a *SumData) addSample(f float64) {
-	a.Value += f
+func (a *SumData) addSample(v float64, _ map[string]interface{}, _ time.Time) {
+	a.Value += v
 }
 
 func (a *SumData) clone() AggregationData {
@@ -88,22 +91,30 @@ func (a *SumData) equal(other AggregationData) bool {
 // Distribution aggregation.
 //
 // Most users won't directly access distribution data.
+//
+// For a distribution with N bounds, the associated DistributionData will have
+// N+1 buckets.
 type DistributionData struct {
-	Count           int64     // number of data points aggregated
-	Min             float64   // minimum value in the distribution
-	Max             float64   // max value in the distribution
-	Mean            float64   // mean of the distribution
-	SumOfSquaredDev float64   // sum of the squared deviation from the mean
-	CountPerBucket  []int64   // number of occurrences per bucket
-	bounds          []float64 // histogram distribution of the values
+	Count           int64   // number of data points aggregated
+	Min             float64 // minimum value in the distribution
+	Max             float64 // max value in the distribution
+	Mean            float64 // mean of the distribution
+	SumOfSquaredDev float64 // sum of the squared deviation from the mean
+	CountPerBucket  []int64 // number of occurrences per bucket
+	// ExemplarsPerBucket is slice the same length as CountPerBucket containing
+	// an exemplar for the associated bucket, or nil.
+	ExemplarsPerBucket []*metricdata.Exemplar
+	bounds             []float64 // histogram distribution of the values
 }
 
 func newDistributionData(bounds []float64) *DistributionData {
+	bucketCount := len(bounds) + 1
 	return &DistributionData{
-		CountPerBucket: make([]int64, len(bounds)+1),
-		bounds:         bounds,
-		Min:            math.MaxFloat64,
-		Max:            math.SmallestNonzeroFloat64,
+		CountPerBucket:     make([]int64, bucketCount),
+		ExemplarsPerBucket: make([]*metricdata.Exemplar, bucketCount),
+		bounds:             bounds,
+		Min:                math.MaxFloat64,
+		Max:                math.SmallestNonzeroFloat64,
 	}
 }
 
@@ -119,46 +130,62 @@ func (a *DistributionData) variance() float64 {
 
 func (a *DistributionData) isAggregationData() bool { return true }
 
-func (a *DistributionData) addSample(f float64) {
-	if f < a.Min {
-		a.Min = f
+// TODO(songy23): support exemplar attachments.
+func (a *DistributionData) addSample(v float64, attachments map[string]interface{}, t time.Time) {
+	if v < a.Min {
+		a.Min = v
 	}
-	if f > a.Max {
-		a.Max = f
+	if v > a.Max {
+		a.Max = v
 	}
 	a.Count++
-	a.incrementBucketCount(f)
+	a.addToBucket(v, attachments, t)
 
 	if a.Count == 1 {
-		a.Mean = f
+		a.Mean = v
 		return
 	}
 
 	oldMean := a.Mean
-	a.Mean = a.Mean + (f-a.Mean)/float64(a.Count)
-	a.SumOfSquaredDev = a.SumOfSquaredDev + (f-oldMean)*(f-a.Mean)
+	a.Mean = a.Mean + (v-a.Mean)/float64(a.Count)
+	a.SumOfSquaredDev = a.SumOfSquaredDev + (v-oldMean)*(v-a.Mean)
 }
 
-func (a *DistributionData) incrementBucketCount(f float64) {
-	if len(a.bounds) == 0 {
-		a.CountPerBucket[0]++
-		return
-	}
-
-	for i, b := range a.bounds {
-		if f < b {
-			a.CountPerBucket[i]++
-			return
+func (a *DistributionData) addToBucket(v float64, attachments map[string]interface{}, t time.Time) {
+	var count *int64
+	var i int
+	var b float64
+	for i, b = range a.bounds {
+		if v < b {
+			count = &a.CountPerBucket[i]
+			break
 		}
 	}
-	a.CountPerBucket[len(a.bounds)]++
+	if count == nil { // Last bucket.
+		i = len(a.bounds)
+		count = &a.CountPerBucket[i]
+	}
+	*count++
+	if exemplar := getExemplar(v, attachments, t); exemplar != nil {
+		a.ExemplarsPerBucket[i] = exemplar
+	}
+}
+
+func getExemplar(v float64, attachments map[string]interface{}, t time.Time) *metricdata.Exemplar {
+	if len(attachments) == 0 {
+		return nil
+	}
+	return &metricdata.Exemplar{
+		Value:       v,
+		Timestamp:   t,
+		Attachments: attachments,
+	}
 }
 
 func (a *DistributionData) clone() AggregationData {
-	counts := make([]int64, len(a.CountPerBucket))
-	copy(counts, a.CountPerBucket)
 	c := *a
-	c.CountPerBucket = counts
+	c.CountPerBucket = append([]int64(nil), a.CountPerBucket...)
+	c.ExemplarsPerBucket = append([]*metricdata.Exemplar(nil), a.ExemplarsPerBucket...)
 	return &c
 }
 
@@ -190,7 +217,7 @@ func (l *LastValueData) isAggregationData() bool {
 	return true
 }
 
-func (l *LastValueData) addSample(v float64) {
+func (l *LastValueData) addSample(v float64, _ map[string]interface{}, _ time.Time) {
 	l.Value = v
 }
 
