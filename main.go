@@ -69,9 +69,8 @@ func main() {
 	bounds := baseImage.Bounds()
 
 	canvas := canvasFromImage(baseImage)
-	sourceCanvas := canvasFromImage(baseImage)
 
-	numberList := rand.Perm(len(faces))
+	numberList := rand.Perm(len(chrisFaces))
 
 	for i, face := range faces {
 		rect := image.Rect(
@@ -87,7 +86,7 @@ func main() {
 			canvas,
 			rect,
 			transcolor.Transfer(
-				sourceCanvas.SubImage(rect),
+				canvasFromImage(baseImage).SubImage(rect),
 				imaging.Resize(
 					newFace, rect.Dx(), rect.Dy(), imaging.Lanczos,
 				),
