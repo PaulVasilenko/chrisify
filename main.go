@@ -78,7 +78,7 @@ func main() {
 			int(face.BoundingPoly.Vertices[0].Y),
 			int(face.BoundingPoly.Vertices[2].X),
 			int(face.BoundingPoly.Vertices[2].Y))
-		newFace := chrisFaces[numberList[i]%len(chrisFaces)]
+		newFace := chrisFaces[numberList[i%len(chrisFaces)]]
 		if newFace == nil {
 			panic("nil face")
 		}
